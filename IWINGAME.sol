@@ -1,8 +1,17 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
+/* 
 
+██╗░██╗░░░░░░░██╗██╗███╗░░██╗░░░░░░░██████╗░░█████╗░███╗░░░███╗███████╗░░░░█████╗░░█████╗░███╗░░░███╗
+██║░██║░░██╗░░██║██║████╗░██║░░░░░░██╔════╝░██╔══██╗████╗░████║██╔════╝░░░██╔══██╗██╔══██╗████╗░████║
+██║░╚██╗████╗██╔╝██║██╔██╗██║█████╗██║░░██╗░███████║██╔████╔██║█████╗░░░░░██║░░╚═╝██║░░██║██╔████╔██║
+██║░░████╔═████║░██║██║╚████║╚════╝██║░░╚██╗██╔══██║██║╚██╔╝██║██╔══╝░░░░░██║░░██╗██║░░██║██║╚██╔╝██║
+██║░░╚██╔╝░╚██╔╝░██║██║░╚███║░░░░░░╚██████╔╝██║░░██║██║░╚═╝░██║███████╗██╗╚█████╔╝╚█████╔╝██║░╚═╝░██║
+╚═╝░░░╚═╝░░░╚═╝░░╚═╝╚═╝░░╚══╝░░░░░░░╚═════╝░╚═╝░░╚═╝╚═╝░░░░░╚═╝╚══════╝╚═╝░╚════╝░░╚════╝░╚═╝░░░░░╚═╝
+ 
+ */
 import { SafeMath } from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import { IBEP20 } from "./interfaces/IBEP20.sol";
+import { IERC20 } from "./interfaces/IERC20.sol";
 import { Auth } from "./lib/Auth.sol";
 import { IDEXRouter } from "./interfaces/IDEXRouter.sol";
 import { IDividendDistributor } from "./interfaces/IDividendDistributor.sol";                                                          
@@ -11,11 +20,11 @@ interface IDEXFactory {
     function createPair(address tokenA, address tokenB) external returns (address pair);
 }
 
-contract IWINGAME is IBEP20, Auth {
+contract IWINGAME is IERC20, Auth {
     using SafeMath for uint256;
 
     uint256 public constant MASK = type(uint128).max;
-    address public WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address public WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; //Etherium 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2  ; Rinkeby: 0xc778417E063141139Fce010982780140Aa0cD5Ab //Goeli: 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6
     address DEAD = 0x000000000000000000000000000000000000dEaD;
     address ZERO = 0x0000000000000000000000000000000000000000;
     address DEAD_NON_CHECKSUM = 0x000000000000000000000000000000000000dEaD;
@@ -37,12 +46,12 @@ contract IWINGAME is IBEP20, Auth {
     mapping (address => bool) isDividendExempt;
     mapping (address => bool) isWhiteList;
 
-    uint256 liquidityFee = 100;
-    uint256 buybackFee = 400;
-    uint256 reflectionFee = 700;
+    uint256 liquidityFee = 500;
+    uint256 buybackFee = 300;
+    uint256 reflectionFee = 500;
     uint256 marketingFee = 200;
-    uint256 totalFee = 1400;
-    uint256 public buyFee = 300;
+    uint256 totalFee = 1500;
+    uint256 public buyFee = 500;
     uint256 feeDenominator = 10000;
 
     address public autoLiquidityReceiver;
@@ -78,10 +87,10 @@ contract IWINGAME is IBEP20, Auth {
     bool inSwap;
     modifier swapping() { inSwap = true; _; inSwap = false;}
 
-    constructor (address _dexRouter) Auth(msg.sender) {
+    constructor (address _dexRouter) Auth(msg.sender) { 
         router = IDEXRouter(_dexRouter);
-        WBNB = router.WETH();
-        pair = IDEXFactory(router.factory()).createPair(WBNB, address(this));
+        WETH = router.WETH();
+        pair = IDEXFactory(router.factory()).createPair(WETH, address(this));
         isPair[pair] = true;
 
         _allowances[address(this)][address(router)] = _totalSupply;
@@ -107,7 +116,6 @@ contract IWINGAME is IBEP20, Auth {
     receive() external payable { }
 
     function withdrawMoney() external onlyOwner{
-        //payable(to).call{value: amount}("");
         (bool success, ) = msg.sender.call{value: address(this).balance}("");
         require(success, "Transfer failed.");
     }
@@ -257,7 +265,7 @@ contract IWINGAME is IBEP20, Auth {
         uint256 amountToSwap = swapThreshold.sub(amountToLiquify).sub(amountReflection);
         address[] memory path = new address[](2);
         path[0] = address(this);
-        path[1] = WBNB;
+        path[1] = WETH;
         uint256 balanceBefore = address(this).balance;
 
         router.swapExactTokensForETHSupportingFeeOnTransferTokens(
@@ -268,18 +276,18 @@ contract IWINGAME is IBEP20, Auth {
             block.timestamp
         );
 
-        uint256 amountBNB = address(this).balance.sub(balanceBefore);
+        uint256 amountETH = address(this).balance.sub(balanceBefore);
 
-        uint256 totalBNBFee = totalFee.sub(dynamicLiquidityFee.div(2)).sub(reflectionFee);
+        uint256 totalETHFee = totalFee.sub(dynamicLiquidityFee.div(2)).sub(reflectionFee);
 
-        uint256 amountBNBLiquidity = amountBNB.mul(dynamicLiquidityFee).div(totalBNBFee).div(2);
-        uint256 amountBNBMarketing = amountBNB.mul(marketingFee).div(totalBNBFee);
+        uint256 amountETHLiquidity = amountETH.mul(dynamicLiquidityFee).div(totalETHFee).div(2);
+        uint256 amountETHMarketing = amountETH.mul(marketingFee).div(totalETHFee);
         
-        (bool success,) = payable(marketingFeeReceiver).call{value: amountBNBMarketing, gas: 30000}("");
-        //(bool success, ) = payable(marketingFeeReceiver).call{value: amountBNBMarketing, gas: 30000}("");
+        (bool success,) = payable(marketingFeeReceiver).call{value: amountETHMarketing, gas: 30000}("");
+        
         require(success, "Transfer failed.");
         if(amountToLiquify > 0){
-            router.addLiquidityETH{value: amountBNBLiquidity}(
+            router.addLiquidityETH{value: amountETHLiquidity}(
                 address(this),
                 amountToLiquify,
                 0,
@@ -287,7 +295,7 @@ contract IWINGAME is IBEP20, Auth {
                 autoLiquidityReceiver,
                 block.timestamp
             );
-            emit AutoLiquify(amountBNBLiquidity, amountToLiquify);
+            emit AutoLiquify(amountETHLiquidity, amountToLiquify);
         }
     }
 
@@ -320,7 +328,7 @@ contract IWINGAME is IBEP20, Auth {
 
     function buyTokens(uint256 amount, address to) internal swapping {
         address[] memory path = new address[](2);
-        path[0] = WBNB;
+        path[0] = WETH;
         path[1] = address(this);
 
         router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(
@@ -427,6 +435,6 @@ contract IWINGAME is IBEP20, Auth {
     }
  
 
-    event AutoLiquify(uint256 amountBNB, uint256 amountBOG);
+    event AutoLiquify(uint256 amountETH, uint256 amountBOG);
     event BuybackMultiplierActive(uint256 duration);
 }
