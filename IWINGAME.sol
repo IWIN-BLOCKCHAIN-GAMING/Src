@@ -388,7 +388,7 @@ contract IWINGAME is IERC20, Auth {
         reflectionFee = _reflectionFee;
         marketingFee = _marketingFee;
         totalFee = _liquidityFee.add(_buybackFee).add(_reflectionFee).add(_marketingFee);
-        require(totalFee <= 2500, "Total fee less than 25%");
+        require(totalFee <= 3000, "Total fee less than 30%");
         feeDenominator = _feeDenominator;
         require(totalFee < feeDenominator/4);
     }
